@@ -30,14 +30,17 @@ dcat_config = dotenv_values(".env")
 
 
 def show_iris_query_ui(domain_list_ui, search_hash_ui):
-    lookup_ui = widgets.VBox([
-        widgets.Label(value="Enter a return delimited list of domains to lookup (no commas, no quotes)"),
-        domain_list_ui,
-        widgets.Label(value="Or..."),
-        widgets.Label(value="Enter an Iris search hassh to lookup"),
-        search_hash_ui,
-    ])
-    return lookup_ui
+    return widgets.VBox(
+        [
+            widgets.Label(
+                value="Enter a return delimited list of domains to lookup (no commas, no quotes)"
+            ),
+            domain_list_ui,
+            widgets.Label(value="Or..."),
+            widgets.Label(value="Enter an Iris search hassh to lookup"),
+            search_hash_ui,
+        ]
+    )
 
 
 def clean_domain_list(domain_list_ui):
@@ -294,19 +297,19 @@ def get_pivots(data_obj, name, return_data=None, count=0, pivot_threshold=500):
         temp_name = name
         for k, v in data_obj.items():
             if isinstance(data_obj[k], (dict, list)):
-                name = "{}_{}".format(name, k)
-                temp_data = get_pivots(
+                name = f"{name}_{k}"
+                if temp_data := get_pivots(
                     data_obj[k], name, return_data, count, pivot_threshold
-                )
-                if temp_data:
+                ):
                     return_data.append([name[1:].upper().replace("_", " "), temp_data])
             name = temp_name
         if "count" in data_obj and (1 < data_obj["count"] < pivot_threshold):
             return data_obj["value"], data_obj["count"]
     elif isinstance(data_obj, list) and len(data_obj):
-        for index, item in enumerate(data_obj):
-            temp_data = get_pivots(item, name, return_data, count, pivot_threshold)
-            if temp_data:
+        for item in data_obj:
+            if temp_data := get_pivots(
+                item, name, return_data, count, pivot_threshold
+            ):
                 if isinstance(temp_data, list):
                     for x in temp_data:
                         return_data.append(x)
@@ -328,18 +331,15 @@ def build_infra_graph(iris_results: list, config: "Config"):
             config.domain_risk_dict[domain["domain"]] = domain.get("domain_risk", {}).get("risk_score", 0)
         # GET PIVOTS
         nps = get_pivots(domain, "", pivot_threshold=config.pivot_threshold)
-        pv_list = []
-        for p in nps:
-            if p[0] not in config.exclude_list:
-                pv_list.append("{}_{}".format(p[0], p[1][0]))
+        pv_list = [f"{p[0]}_{p[1][0]}" for p in nps if p[0] not in config.exclude_list]
         # CREATE POSSIBLE NODES AND POSSIBLE EDGES
         x = itertools.combinations(pv_list, 2)
         for g in x:
-            if "{}:::{}".format(g[0], g[1]) in pv_dict:
-                if domain["domain"] not in pv_dict["{}:::{}".format(g[0], g[1])]:
-                    pv_dict["{}:::{}".format(g[0], g[1])].append(domain["domain"])
+            if f"{g[0]}:::{g[1]}" in pv_dict:
+                if domain["domain"] not in pv_dict[f"{g[0]}:::{g[1]}"]:
+                    pv_dict[f"{g[0]}:::{g[1]}"].append(domain["domain"])
             else:
-                pv_dict["{}:::{}".format(g[0], g[1])] = [domain["domain"]]
+                pv_dict[f"{g[0]}:::{g[1]}"] = [domain["domain"]]
 
     b_pv_list = []
     my_set = set()
@@ -373,10 +373,9 @@ def build_pair_infra_graph(iris_results: list, config: "Config"):
         # GET PIVOTS
         nps = get_pivots(domain, "", pivot_threshold=config.pivot_threshold)
         pv_list = [
-            "{}_{}".format(p[0], p[1][0])
-            for p in nps
-            if p[0] not in config.exclude_list
+            f"{p[0]}_{p[1][0]}" for p in nps if p[0] not in config.exclude_list
         ]
+
 
         # CREATE POSSIBLE NODES AND POSSIBLE EDGES
         x = itertools.combinations(pv_list, 2)
@@ -384,16 +383,16 @@ def build_pair_infra_graph(iris_results: list, config: "Config"):
         i_list = []
         for g in x:
             # print("{}:::{}".format(g[0], g[1]))
-            if "{}:::{}".format(g[0], g[1]) not in i_list and g[0] != g[1]:
-                i_list.append("{}:::{}".format(g[0], g[1]))
+            if f"{g[0]}:::{g[1]}" not in i_list and g[0] != g[1]:
+                i_list.append(f"{g[0]}:::{g[1]}")
         y = itertools.combinations(i_list, 2)
         for g in y:
 
-            if "{}|||{}".format(g[0], g[1]) in pv_dict:
-                if domain["domain"] not in pv_dict["{}|||{}".format(g[0], g[1])]:
-                    pv_dict["{}|||{}".format(g[0], g[1])].append(domain["domain"])
+            if f"{g[0]}|||{g[1]}" in pv_dict:
+                if domain["domain"] not in pv_dict[f"{g[0]}|||{g[1]}"]:
+                    pv_dict[f"{g[0]}|||{g[1]}"].append(domain["domain"])
             else:
-                pv_dict["{}|||{}".format(g[0], g[1])] = [domain["domain"]]
+                pv_dict[f"{g[0]}|||{g[1]}"] = [domain["domain"]]
     # print(pv_dict)
     b_pv_list = []
     my_set = set()

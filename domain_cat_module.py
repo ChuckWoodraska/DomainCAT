@@ -23,14 +23,17 @@ from dotenv import dotenv_values
 dcat_config = dotenv_values(".env")
 
 def show_iris_query_ui(domain_list_ui, search_hash_ui):
-    lookup_ui = widgets.VBox([
-        widgets.Label(value="Enter a return delimited list of domains to lookup (no commas, no quotes)"),
-        domain_list_ui,
-        widgets.Label(value="Or..."),
-        widgets.Label(value="Enter an Iris search hassh to lookup"),
-        search_hash_ui,
-    ])
-    return lookup_ui
+    return widgets.VBox(
+        [
+            widgets.Label(
+                value="Enter a return delimited list of domains to lookup (no commas, no quotes)"
+            ),
+            domain_list_ui,
+            widgets.Label(value="Or..."),
+            widgets.Label(value="Enter an Iris search hassh to lookup"),
+            search_hash_ui,
+        ]
+    )
 
 
 def clean_domain_list(domain_list_ui):
@@ -63,7 +66,7 @@ def query_iris_rest_api(api_username_ui, api_pw_ui, domain_list_ui, search_hash_
         max_domains = 100
         start = 0
         end = max_domains
-        for x in range(math.ceil(len(full_domain_list) / max_domains)):
+        for _ in range(math.ceil(len(full_domain_list) / max_domains)):
             # slice out max domains to query
             partial_domain_list = full_domain_list[start:end]
             # build query string
@@ -88,13 +91,12 @@ def query_iris_rest_api(api_username_ui, api_pw_ui, domain_list_ui, search_hash_
         raise Exception("Domain List and Search Hash text boxes are empty")
 
 
-def _query_iris_rest_api(api_username: str, api_key: str, iris_query: str):        
+def _query_iris_rest_api(api_username: str, api_key: str, iris_query: str):    
     root_api_url = "https://api.domaintools.com/v1/iris-investigate/"
     resp = requests.post(root_api_url, data=iris_query)
     if resp.status_code != 200:
         raise Exception(f'POST /iris-investigate/ {resp.status_code}: {resp.text}')
-    iris_results = resp.json()
-    return iris_results
+    return resp.json()
 
 
 def remove_domains_from_graph(graph, remove_domains_ui):
@@ -289,7 +291,7 @@ def append_value(pivot_categories: dict,
         pivot_value = str(json_data[pivot_category]).strip()
 
         # check we have a value to add
-        if len(pivot_value) > 0:
+        if pivot_value != "":
             _append_value_to_pivot(pivot_categories, pivot_category, pivot_value, None,
                                    domain, config, new_pivot_category)
 
@@ -301,17 +303,23 @@ def append_value_with_count(pivot_categories: dict,
                             config: "Config",
                             new_pivot_category: str = None):
     # check if pivot is in domain json
-    if pivot_category in json_data:
-        if isinstance(json_data[pivot_category], dict): 
-            pivot_value = str(json_data[pivot_category]["value"]).strip()
-            global_pivot_count = json_data[pivot_category]["count"]
+    if pivot_category in json_data and isinstance(
+        json_data[pivot_category], dict
+    ):
+        pivot_value = str(json_data[pivot_category]["value"]).strip()
+        global_pivot_count = json_data[pivot_category]["count"]
 
             # trim pivots that are above the threshold (except create_date)
-            if global_pivot_count < config.global_count_threshold or pivot_category == "create_date":
-                # check we have a value to add
-                if len(pivot_value) > 0 and global_pivot_count > 0:
-                    _append_value_to_pivot(pivot_categories, pivot_category, pivot_value,
-                                           global_pivot_count, domain, config, new_pivot_category)
+        if (
+            (
+                global_pivot_count < config.global_count_threshold
+                or pivot_category == "create_date"
+            )
+            and pivot_value != ""
+            and global_pivot_count > 0
+        ):
+            _append_value_to_pivot(pivot_categories, pivot_category, pivot_value,
+                                   global_pivot_count, domain, config, new_pivot_category)
             
             
 def append_values_with_counts(pivot_categories: dict,
@@ -325,9 +333,13 @@ def append_values_with_counts(pivot_categories: dict,
         for pivot in json_data[pivot_category]:
             pivot_value = str(pivot["value"]).strip()
             global_pivot_count = pivot["count"]
-                        
+
             # check if we want to add this value
-            if len(pivot_value) > 0 and global_pivot_count > 0 and global_pivot_count < config.global_count_threshold:
+            if (
+                pivot_value != ""
+                and global_pivot_count > 0
+                and global_pivot_count < config.global_count_threshold
+            ):
                 _append_value_to_pivot(pivot_categories, pivot_category, pivot_value,
                                        global_pivot_count, domain, config, new_pivot_category)
 
@@ -470,9 +482,8 @@ def trim_pivots(pivot_categories: dict, domain_count: int, config: "Config"):
     By defualt, pivots that only have one domain are removed, but this can be configured by 
     setting the min_pivot_size variable to a different value. For example, if you only wanted 
     to use pivots that had 10 or more domains connected to them
-    """    
-    for pivot_category_key in pivot_categories:
-        pivot_category = pivot_categories[pivot_category_key]
+    """
+    for pivot_category_key, pivot_category in pivot_categories.items():
         total_pivots = 0
         del_count = 0
         for pivot_value in list(pivot_category.keys()):
@@ -497,8 +508,7 @@ def trim_unconnected_domains(graph: "Graph", pivot_categories: dict, config: "Co
     """
     if config.print_debug_output: print(f"{len(graph.nodes)} domains in Iris result set")
     connected_domains = set()
-    for pivot_category_key in pivot_categories:
-        pivot_category = pivot_categories[pivot_category_key]
+    for pivot_category in pivot_categories.values():
         for pivot_value in list(pivot_category.keys()):
             pivot_domains = pivot_category[pivot_value].domains
             connected_domains = connected_domains.union(pivot_domains)
@@ -506,7 +516,7 @@ def trim_unconnected_domains(graph: "Graph", pivot_categories: dict, config: "Co
     # get the set of domains that are not connected
     domains = set(graph.nodes)
     lonely_domains = domains.difference(connected_domains)
-            
+
     # remove unconnected domains
     for domain in lonely_domains:
         graph.remove_node(domain)        
@@ -517,7 +527,7 @@ def trim_unconnected_domains(graph: "Graph", pivot_categories: dict, config: "Co
         print("Unconnected domains removed from graph:")
         for domain in lonely_domains:
             print(f"  {domain}")
-    
+
     return lonely_domains
 
 
@@ -558,7 +568,7 @@ def get_pivot_connection_weight(pivot_category: str,
     """
     if pivot_category not in config.pivot_category_config:
         raise Exception(f"Unexpected Pivot Category: {pivot_category}")
-    
+
     # scale the edge strength based on the ratio of the global pivot count vs the max domains
     if config.scale_edge_strength_by_pivot_count:
         if global_pivot_count is None:
@@ -568,8 +578,10 @@ def get_pivot_connection_weight(pivot_category: str,
             # Also, TLD doesn't have a pivot count because it's often huge. Is that the same.
             #    importance as common substrings? Probably not.
             return 0.5
-        inv_ratio = 1.0 - math.log(1.0 + global_pivot_count) / math.log(1.0 + config.max_domains)
-        return inv_ratio
+        return 1.0 - math.log(1.0 + global_pivot_count) / math.log(
+            1.0 + config.max_domains
+        )
+
 #         return math.pow(1.0 + inverse_log_ratio, 3) - 1
     return 1
 
@@ -615,10 +627,9 @@ def calc_pivot_stats(graph: "Graph", pivot_categories: dict):
     # collect counts for each pivot category
     category_domain_counts = {}
     category_edge_counts = {}
-    for category_key in pivot_categories:
+    for category_key, category in pivot_categories.items():
         category_domain_counts[category_key] = 0
         category_edge_counts[category_key] = 0
-        category = pivot_categories[category_key]
         for pivot_value in category:
             category_domain_counts[category_key] += len(category[pivot_value].domains)
 
@@ -636,17 +647,16 @@ def calc_pivot_stats(graph: "Graph", pivot_categories: dict):
                "# of connections"]
     table = []
     total_domains = len(graph.nodes)
-    for category_key in category_domain_counts:
+    for category_key, domain_count in category_domain_counts.items():
         cat_pivot_count = len(pivot_categories[category_key])
         if cat_pivot_count > 0:
-            domain_count = category_domain_counts[category_key]
             edge_count = category_edge_counts[category_key]
 
             total_connections += edge_count
 
             avg_domains = domain_count / cat_pivot_count
-            percent_of_total_domains = round(100 * (domain_count / total_domains), 2)                
-            percent_of_total_edges = round(100 * (edge_count / max_edge_count), 2)            
+            percent_of_total_domains = round(100 * (domain_count / total_domains), 2)
+            percent_of_total_edges = round(100 * (edge_count / max_edge_count), 2)
             table.append([category_key,
                           f"{domain_count} ({percent_of_total_domains}%)",
                           cat_pivot_count,
@@ -736,7 +746,7 @@ def build_3d_graph_layout(graph: "Graph"):
                    ),
                    text=node_labels, 
                    hoverinfo='text')    
-    
+
     # background definition, but everything is turned off
     axis=dict(showbackground=False,
               showline=False,
@@ -753,8 +763,7 @@ def build_3d_graph_layout(graph: "Graph"):
              margin=dict(t=100), hovermode='closest')
 
     data=[trace1, trace2]
-    fig=go.Figure(data=data, layout=layout)
-    return fig
+    return go.Figure(data=data, layout=layout)
 
 
 def build_2d_graph_layout(graph: "Graph", get_2d_shared_pivots: "function"):
@@ -1067,11 +1076,9 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whit
     else:
         threshold = im.norm(data.max())/2.
 
-    # Set default alignment to center, but allow it to be
-    # overwritten by textkw.
-    kw = dict(horizontalalignment="center",
-              verticalalignment="center")
-    kw.update(textkw)
+    kw = (
+        dict(horizontalalignment="center", verticalalignment="center") | textkw
+    )
 
     # Get the formatter in case a string is supplied
     if isinstance(valfmt, str):
